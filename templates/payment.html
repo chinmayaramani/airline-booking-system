@@ -1,0 +1,15 @@
+<h2>Enter Payment Details</h2>
+<form method="post" action="{{ url_for('confirm_booking') }}">
+    <input type="hidden" name="flight_number" value="{{ flight_number }}">
+    <input type="hidden" name="seat_number" value="{{ seat_number }}">
+
+    <div class="mb-3">
+        <label for="card_number">Card Number</label>
+        <input type="text" class="form-control" name="card_number" required>
+    </div>
+    <div class="mb-3">
+        <label for="name">Name on Card</label>
+        <input type="text" class="form-control" name="name" required>
+    </div>
+    <button type="submit" class="btn btn-success">Confirm Booking</button>
+</form>

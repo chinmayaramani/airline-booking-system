@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Flights</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body class="container">
+    <h1 class="mt-5">Available Flights</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    {% if current_user.is_authenticated %}
+    <p class="text-success">You are logged in as: {{ current_user.name }} ({{ current_user.email }})</p>
+    {% else %}
+    <p class="text-warning">You are not logged in. <a href="{{ url_for('login') }}">Log in to book flights</a>.</p>
+    {% endif %}
+
+    <table class="table table-bordered mt-3">
+        <thead class="table-dark">
+            <tr>
+                <th>Flight Number</th>
+                <th>Airline ID</th>
+                <th>Departure</th>
+                <th>Arrival</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Price</th>
+                <th>Book</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for flight in flights %}
+            <tr>
+                <td>{{ flight.Flight_Number }}</td>
+                <td>{{ flight.Airline_ID }}</td>
+                <td>{{ flight.Departure }}</td>
+                <td>{{ flight.Arrival }}</td>
+                <td>{{ flight.Date }}</td>
+                <td>{{ flight.Time }}</td>
+                <td>${{ flight.Price }}</td>
+                <td>
+                    {% if current_user.is_authenticated %}
+                    <form action="{{ url_for('select_seat') }}" method="post">
+                        <input type="hidden" name="flight_number" value="{{ flight.Flight_Number }}">
+                        <button type="submit" class="btn btn-success btn-sm">Book</button>
+                    </form>
+                    {% else %}
+                    <span class="text-muted">Login to book</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="text-center">No flights available.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <a href="/" class="btn btn-primary mt-3">Back to Home</a>
+</body>
+</html>
