@@ -20,6 +20,10 @@
         <a href="{{ url_for('flights') }}" class="btn btn-primary">View Flights</a>
         <a href="{{ url_for('logout') }}" class="btn btn-secondary">Logout</a>
 
+        {% if current_user.is_admin %}
+            <a href="{{ url_for('add_flight') }}" class="btn btn-warning ms-2">➕ Add New Flight</a>
+        {% endif %}
+
         {% if booking %}
         <div class="alert alert-info mt-4">
             <strong>Latest Booking:</strong> Flight {{ booking.Flight_Number }}, Seat {{ booking.Seat_Number }}<br>
