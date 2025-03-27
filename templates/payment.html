@@ -2,6 +2,7 @@
 <form method="post" action="{{ url_for('confirm_booking') }}">
     <input type="hidden" name="flight_number" value="{{ flight_number }}">
     <input type="hidden" name="seat_number" value="{{ seat_number }}">
+    <input type="hidden" name="price" value="{{ price }}">
 
     <div class="mb-3">
         <label for="card_number">Card Number</label>
@@ -11,5 +12,10 @@
         <label for="name">Name on Card</label>
         <input type="text" class="form-control" name="name" required>
     </div>
+    
+    <div class="alert alert-info">
+        You're about to pay <strong>${{ price }}</strong> for seat <strong>{{ seat_number }}</strong> on flight <strong>{{ flight_number }}</strong>.
+    </div>
+
     <button type="submit" class="btn btn-success">Confirm Booking</button>
 </form>

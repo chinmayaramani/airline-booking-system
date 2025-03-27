@@ -2,64 +2,169 @@
 <html lang="en">
 <head>
     <title>Select Seat</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <meta charset="UTF-8">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        .seat {
-            width: 60px;
-            height: 60px;
-            margin: 6px;
-            font-weight: bold;
-            border-radius: 8px;
+        body {
+            background: #f5f5f5;
         }
-        .available { background-color: #28a745; color: white; }
-        .selected { background-color: #ffc107; color: black; }
-        .occupied { background-color: #dc3545; color: white; }
-        .row-label { width: 100%; font-weight: bold; margin-top: 10px; }
-    </style>
-    <script>
-        function selectSeat(seatNumber, seatClass, price) {
-            document.getElementById("seat_number").value = seatNumber;
-            document.getElementById("seat_class").value = seatClass;
-            document.getElementById("price").value = price;
-            document.getElementById("priceDisplay").innerText = "$" + price + " (" + seatClass + ")";
 
-            document.querySelectorAll(".seat").forEach(btn => {
-                btn.classList.remove("selected");
-            });
-            document.getElementById("btn-" + seatNumber).classList.add("selected");
+        .aircraft-container {
+            background: linear-gradient(to bottom, #e3f2fd, #fff);
+            padding: 1rem 1rem;
+            border-radius: 1rem;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            max-width: 720px;
+            margin: auto;
+        }
+
+        .legend {
+            margin-bottom: 1rem;
+        }
+        .legend .legend-item {
+            display: inline-block;
+            margin-right: 15px;
+        }
+        .legend-box {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            margin-right: 5px;
+        }
+        .first { background-color: #d1c4e9; }
+        .business { background-color: #ffe082; }
+        .economy { background-color: #b2dfdb; }
+        .booked { background-color: #ef9a9a; }
+        .selected { background-color: #1976d2 !important; color: white; }
+
+        .seat-map {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .row-seats {
+            display: flex;
+            gap: 0.3rem;
+            justify-content: center;
+        }
+
+        .seat {
+            width: 40px;
+            height: 40px;
+            border-radius: 5px;
+            text-align: center;
+            line-height: 40px;
+            border: 1px solid #999;
+            font-size: 14px;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .seat:hover::after {
+            content: attr(data-price);
+            position: absolute;
+            bottom: -22px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #212529;
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .seat.invisible { visibility: hidden; }
+
+        .aisle-space {
+            width: 30px;
+        }
+
+        .airplane-outline {
+            border: 2px solid #90a4ae;
+            border-radius: 15px;
+            padding: 1rem 1rem;
+            position: relative;
+        }
+
+        .wing-label {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-weight: bold;
+            color: #78909c;
+            font-size: 1.1rem;
+        }
+
+        .left-wing { left: -70px; }
+        .right-wing { right: -70px; }
+    </style>
+</head>
+<body class="container mt-4">
+    <h2 class="mb-3 text-center">✈️ Seat Selection – Flight {{ flight_number }}</h2>
+
+    <div class="legend text-center">
+        <span class="legend-item"><span class="legend-box first"></span> First Class</span>
+        <span class="legend-item"><span class="legend-box business"></span> Business</span>
+        <span class="legend-item"><span class="legend-box economy"></span> Economy</span>
+        <span class="legend-item"><span class="legend-box booked"></span> Booked</span>
+    </div>
+
+    <div class="aircraft-container airplane-outline">
+        <div class="wing-label left-wing">🛩️ Wing</div>
+        <div class="wing-label right-wing">Wing 🛩️</div>
+
+        <form method="POST" action="{{ url_for('payment') }}">
+            <input type="hidden" name="flight_number" value="{{ flight_number }}">
+            <input type="hidden" id="seat_number" name="seat_number">
+            <input type="hidden" id="seat_class" name="seat_class">
+            <input type="hidden" id="price" name="price">
+
+            <div class="seat-map">
+                {% for row_num, row in seat_rows.items() %}
+                    {% set is_first_or_business = row|select('string')|map(attribute='Seat_Class')|list|first in ['First Class', 'Business'] %}
+                    <div class="row-seats {% if is_first_or_business %}justify-content-center{% endif %}">
+                        {% for i in range(7) %}
+                            {% if i == 2 or i == 5 %}
+                                <div class="aisle-space"></div>
+                            {% endif %}
+                            {% set seat = row[i] %}
+                            {% if seat is none %}
+                                <div class="seat invisible"></div>
+                            {% else %}
+                                {% set status_class = 'booked' if seat.Booked else seat.Seat_Class|lower %}
+                                <div class="seat {{ status_class }}"
+                                     data-seat="{{ seat.Seat_Number }}"
+                                     data-seat-class="{{ seat.Seat_Class }}"
+                                     data-price="${{ seat.Price }}"
+                                     onclick="selectSeat(this)">
+                                    {{ seat.Seat_Number }}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div class="text-center">
+                <button type="submit" class="btn btn-primary btn-lg mt-3">Continue to Payment</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        function selectSeat(el) {
+            if (el.classList.contains('booked')) return;
+            document.querySelectorAll('.seat').forEach(s => s.classList.remove('selected'));
+            el.classList.add('selected');
+            document.getElementById('seat_number').value = el.dataset.seat;
+            document.getElementById('seat_class').value = el.dataset.seatClass;
+            document.getElementById('price').value = el.dataset.price.replace('$', '');
         }
     </script>
-</head>
-<body class="container">
-    <h2 class="mt-4">Select a Seat for Flight {{ flight_number }}</h2>
-
-    <form method="POST" action="{{ url_for('payment') }}">
-        <input type="hidden" name="flight_number" value="{{ flight_number }}">
-        <input type="hidden" name="seat_number" id="seat_number">
-        <input type="hidden" name="seat_class" id="seat_class">
-        <input type="hidden" name="price" id="price">
-
-        <div class="d-flex flex-wrap">
-            {% for seat in seats %}
-                {% if loop.index0 % 4 == 0 %}
-                    <div class="row-label">Row {{ seat.Seat_Number[0] }}</div>
-                {% endif %}
-                <button type="button"
-                        id="btn-{{ seat.Seat_Number }}"
-                        class="seat btn {% if seat.Booked %}occupied{% else %}available{% endif %}"
-                        {% if seat.Booked %}disabled{% else %}onclick="selectSeat('{{ seat.Seat_Number }}', '{{ seat.Seat_Class }}', {{ seat.Price }})"{% endif %}>
-                    {{ seat.Seat_Number }}
-                </button>
-            {% endfor %}
-        </div>
-
-        <div class="mt-4">
-            <strong>Selected Seat Price:</strong> <span id="priceDisplay" class="text-info">$0</span>
-        </div>
-
-        <button type="submit" class="btn btn-primary mt-3">Continue to Payment</button>
-    </form>
-
-    <a href="/flights" class="btn btn-secondary mt-3">Back to Flights</a>
 </body>
 </html>

@@ -41,7 +41,9 @@
     <div class="text-center">
         {% if current_user.is_authenticated %}
             <h4>Hello, {{ current_user.name }}!</h4>
+
             <a href="{{ url_for('flights') }}" class="btn btn-primary btn-lg mt-3">✈️ View Flights</a>
+            <a href="{{ url_for('my_bookings') }}" class="btn btn-info btn-lg mt-3 ms-2">📋 My Bookings</a>
             <a href="{{ url_for('logout') }}" class="btn btn-outline-dark btn-lg mt-3 ms-2">Logout</a>
 
             {% if current_user.is_admin %}

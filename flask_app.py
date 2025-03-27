@@ -39,21 +39,85 @@ def load_user(user_id):
         return User(user["User_ID"], user["Name"], user["Email"], user["is_admin"])
     return None
 
+# Default seat generation for one flight
 def insert_default_seats(flight_number):
     con = get_db_connection()
     cur = con.cursor()
-    seats = [
-        ('A1', 'Economy'), ('A2', 'Economy'), ('A3', 'Economy'), ('A4', 'Economy'),
-        ('B1', 'Business'), ('B2', 'Business'),
-        ('C1', 'First Class'), ('C2', 'First Class')
-    ]
-    for seat_number, seat_class in seats:
+
+    seat_data = []
+
+    # First Class (Rows 1–2): A, C, D, F
+    for row in range(1, 3):
+        for seat in ['A', 'C', 'D', 'F']:
+            seat_data.append((f"{row}{seat}", 'First Class'))
+
+    # Business Class (Rows 3–7): A, C, D, F
+    for row in range(3, 8):
+        for seat in ['A', 'C', 'D', 'F']:
+            seat_data.append((f"{row}{seat}", 'Business'))
+
+    # Economy Class (Rows 8–35): A, B, C, D, E, F, G
+    for row in range(8, 36):
+        for seat in ['A', 'B', 'C', 'D', 'E', 'F', 'G']:
+            seat_data.append((f"{row}{seat}", 'Economy'))
+
+    for seat_number, seat_class in seat_data:
         cur.execute("""
             INSERT INTO Seats (Flight_Number, Seat_Number, Seat_Class, Status)
             VALUES (%s, %s, %s, 'Available')
         """, (flight_number, seat_number, seat_class))
+
     con.commit()
     con.close()
+
+# 🔥 Function to generate seats for all flights without them
+def generate_seats_for_all_flights():
+    con = get_db_connection()
+    cur = con.cursor()
+    cur.execute("SELECT Flight_Number FROM Flights")
+    all_flights = [row['Flight_Number'] for row in cur.fetchall()]
+
+    cur.execute("SELECT DISTINCT Flight_Number FROM Seats")
+    existing_flights = [row['Flight_Number'] for row in cur.fetchall()]
+
+    flights_missing_seats = [f for f in all_flights if f not in existing_flights]
+
+    for flight in flights_missing_seats:
+        print(f"Generating seats for flight: {flight}")
+        insert_default_seats(flight)
+
+    con.close()
+
+# Add this route temporarily for development/testing:
+@app.route('/generate-seats-for-all')
+@login_required
+def generate_seats_for_all():
+    if not current_user.is_admin:
+        flash("Unauthorized access.", "danger")
+        return redirect(url_for('home'))
+
+    con = get_db_connection()
+    cur = con.cursor()
+    cur.execute("SELECT Flight_Number FROM Flights")
+    flights = cur.fetchall()
+    con.close()
+
+    for flight in flights:
+        insert_default_seats(flight["Flight_Number"])
+
+    flash("Seats generated for all flights.", "success")
+    return redirect(url_for('flights'))
+# ✅ Route to allow admin to generate missing seats
+@app.route('/admin/generate-seats')
+@login_required
+def generate_seats_route():
+    if not current_user.is_admin:
+        flash("Access denied: Admins only.", "danger")
+        return redirect(url_for("home"))
+
+    generate_seats_for_all_flights()
+    flash("Seats generated for all missing flights!", "success")
+    return redirect(url_for("flights"))
 
 @app.route('/')
 def home():
@@ -72,10 +136,97 @@ def home():
 def flights():
     con = get_db_connection()
     cur = con.cursor()
-    cur.execute("SELECT * FROM Flights")
+
+    # Get unique cities for dropdowns
+    cur.execute("SELECT DISTINCT Departure FROM Flights")
+    departures = [row['Departure'] for row in cur.fetchall()]
+
+    cur.execute("SELECT DISTINCT Arrival FROM Flights")
+    arrivals = [row['Arrival'] for row in cur.fetchall()]
+
+    # Handle filters
+    departure = request.args.get('departure')
+    arrival = request.args.get('arrival')
+    date = request.args.get('date')
+    min_price = request.args.get('min_price')
+    max_price = request.args.get('max_price')
+
+    base_query = "SELECT * FROM Flights WHERE 1=1"
+    filters = []
+    values = []
+
+    if departure:
+        base_query += " AND Departure = %s"
+        values.append(departure)
+    if arrival:
+        base_query += " AND Arrival = %s"
+        values.append(arrival)
+    if date:
+        base_query += " AND Date = %s"
+        values.append(date)
+    if min_price:
+        base_query += " AND Price >= %s"
+        values.append(min_price)
+    if max_price:
+        base_query += " AND Price <= %s"
+        values.append(max_price)
+
+    cur.execute(base_query, values)
     flights = cur.fetchall()
     con.close()
-    return render_template("flights.html", flights=flights)
+
+    return render_template("flights.html", flights=flights, departures=departures, arrivals=arrivals)
+
+
+@app.route('/my-bookings')
+@login_required
+def my_bookings():
+    con = get_db_connection()
+    cur = con.cursor()
+    cur.execute("""
+        SELECT b.Booking_ID, b.Seat_Number, b.Total_Price, b.Booking_Date,
+               f.Flight_Number, f.Airline, f.Departure, f.Arrival, f.Date, f.Time
+        FROM Bookings b
+        JOIN Flights f ON b.Flight_Number = f.Flight_Number
+        WHERE b.Passenger_ID = %s
+        ORDER BY b.Booking_Date DESC
+    """, (current_user.id,))
+    bookings = cur.fetchall()
+    con.close()
+    return render_template('my_bookings.html', bookings=bookings)
+
+@app.route('/cancel-booking/<int:booking_id>', methods=['POST'])
+@login_required
+def cancel_booking(booking_id):
+    con = get_db_connection()
+    cur = con.cursor()
+    try:
+        cur.execute("SELECT Flight_Number, Seat_Number FROM Bookings WHERE Booking_ID = %s AND Passenger_ID = %s",
+                    (booking_id, current_user.id))
+        booking = cur.fetchone()
+
+        if not booking:
+            flash("Booking not found or unauthorized.", "danger")
+            return redirect(url_for('my_bookings'))
+
+        # Delete from Payment and Bookings
+        cur.execute("DELETE FROM Payment WHERE Booking_ID = %s", (booking_id,))
+        cur.execute("DELETE FROM Bookings WHERE Booking_ID = %s", (booking_id,))
+
+        # Make seat available again
+        cur.execute("""
+            UPDATE Seats SET Status = 'Available'
+            WHERE Flight_Number = %s AND Seat_Number = %s
+        """, (booking['Flight_Number'], booking['Seat_Number']))
+
+        con.commit()
+        flash("Booking cancelled successfully!", "success")
+    except Exception as e:
+        flash(f"Error cancelling booking: {e}", "danger")
+    finally:
+        con.close()
+
+    return redirect(url_for('my_bookings'))
 
 @app.route('/add-flight', methods=['GET', 'POST'])
 @login_required
@@ -116,29 +267,61 @@ def add_flight():
 @app.route('/select-seat', methods=['POST'])
 @login_required
 def select_seat():
+    from collections import defaultdict
+
+    def generate_seat_rows(seats):
+        seat_rows = defaultdict(lambda: [None] * 7)  # 7 seats per row: A-G
+        column_mapping = {'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, 'F': 5, 'G': 6}
+        for seat in seats:
+            seat_number = seat["Seat_Number"]
+            row_part = ''.join(filter(str.isdigit, seat_number))
+            col_part = ''.join(filter(str.isalpha, seat_number)).upper()
+            if not row_part or col_part not in column_mapping:
+                continue
+            row = int(row_part)
+            col_index = column_mapping[col_part]
+            seat_rows[row][col_index] = seat
+        return dict(sorted(seat_rows.items()))
+
     try:
         flight_number = request.form['flight_number']
         con = get_db_connection()
         cur = con.cursor()
+
+        # Fetch base price from Flights table
+        cur.execute("SELECT Price FROM Flights WHERE Flight_Number = %s", (flight_number,))
+        flight = cur.fetchone()
+        if not flight:
+            flash("Flight not found.", "danger")
+            return redirect(url_for('flights'))
+
+        base_price = float(flight['Price'])
+
+        # Fetch seats
         cur.execute("""
-            SELECT s.Seat_Number, s.Flight_Number, s.Seat_Class,
-                CASE 
-                    WHEN s.Seat_Class = 'Business' THEN 1000
-                    WHEN s.Seat_Class = 'First Class' THEN 1500
-                    ELSE 500
-                END AS Price,
-                s.Status
-            FROM Seats s
-            WHERE s.Flight_Number = %s
-            ORDER BY s.Seat_Number
+            SELECT Seat_Number, Seat_Class, Status
+            FROM Seats
+            WHERE Flight_Number = %s
+            ORDER BY Seat_Number
         """, (flight_number,))
         seats = cur.fetchall()
+
         for seat in seats:
             seat["Booked"] = seat["Status"] == "Booked"
+            if seat["Seat_Class"] == "First Class":
+                seat["Price"] = round(base_price * 1.5, 2)
+            elif seat["Seat_Class"] == "Business":
+                seat["Price"] = round(base_price * 1.25, 2)
+            else:
+                seat["Price"] = round(base_price, 2)
+
+        seat_rows = generate_seat_rows(seats)
+
         con.close()
-        return render_template("select_seat.html", seats=seats, flight_number=flight_number)
+        return render_template("select_seat.html", flight_number=flight_number, seat_rows=seat_rows)
+
     except Exception as e:
-        return f"An error occurred: {e}"
+        return f"Error loading seat selection: {e}"
 
 @app.route('/payment', methods=['POST'])
 @login_required
@@ -162,7 +345,7 @@ def confirm_booking():
         VALUES (%s, %s, NOW(), %s, %s)
     """, (current_user.id, flight_number, seat_number, price))
     cur.execute("""
-        INSERT INTO Payment (Booking_ID, Date, Amount, Transaction)
+        INSERT INTO Payment (Booking_ID, Payment_Date, Amount, Payment_Status)
         VALUES (LAST_INSERT_ID(), NOW(), %s, 'Completed')
     """, (price,))
     cur.execute("""
@@ -257,22 +440,16 @@ def edit_flight(flight_number):
 
             con.commit()
             flash("Flight updated successfully!", "success")
-            return redirect(url_for('flights'))
-
         except Exception as e:
             flash(f"Error: {e}", "danger")
-
         finally:
             con.close()
             return redirect(url_for('flights'))
 
-    else:
-        # Only fetch and render on GET request
-        cur.execute("SELECT * FROM Flights WHERE Flight_Number = %s", (flight_number,))
-        flight = cur.fetchone()
-        con.close()
-        return render_template('edit_flight.html', flight=flight)
-
+    cur.execute("SELECT * FROM Flights WHERE Flight_Number = %s", (flight_number,))
+    flight = cur.fetchone()
+    con.close()
+    return render_template('edit_flight.html', flight=flight)
 
 @app.route('/delete-flight/<flight_number>', methods=['POST'])
 @login_required

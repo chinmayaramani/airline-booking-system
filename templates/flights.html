@@ -2,10 +2,44 @@
 <html lang="en">
 <head>
     <title>Flights</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <meta charset="UTF-8">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-<body class="container">
-    <h1 class="mt-5">Available Flights</h1>
+<body class="container mt-5">
+    <h2 class="mb-4 text-center">✈️ Search & Book Flights</h2>
+
+    <!-- Hybrid Search Form -->
+    <form method="GET" action="{{ url_for('flights') }}" class="row g-3 mb-4">
+        <div class="col-md-3">
+            <input list="departure-list" name="departure" class="form-control" placeholder="From" value="{{ request.args.get('departure', '') }}">
+            <datalist id="departure-list">
+                {% for city in departures %}
+                    <option value="{{ city }}">
+                {% endfor %}
+            </datalist>
+        </div>
+        <div class="col-md-3">
+            <input list="arrival-list" name="arrival" class="form-control" placeholder="To" value="{{ request.args.get('arrival', '') }}">
+            <datalist id="arrival-list">
+                {% for city in arrivals %}
+                    <option value="{{ city }}">
+                {% endfor %}
+            </datalist>
+        </div>
+        <div class="col-md-2">
+            <input type="date" class="form-control" name="date" value="{{ request.args.get('date', '') }}">
+        </div>
+        <div class="col-md-2">
+            <input type="number" class="form-control" name="min_price" placeholder="Min $" min="0" value="{{ request.args.get('min_price', '') }}">
+        </div>
+        <div class="col-md-2 d-flex">
+            <input type="number" class="form-control me-2" name="max_price" placeholder="Max $" min="0" value="{{ request.args.get('max_price', '') }}">
+            <button type="submit" class="btn btn-primary">🔍</button>
+        </div>
+        <div class="col-12 text-end">
+            <a href="{{ url_for('flights') }}" class="btn btn-outline-secondary">🔄 Clear</a>
+        </div>
+    </form>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
@@ -15,55 +49,65 @@
     {% endif %}
     {% endwith %}
 
-    {% if current_user.is_authenticated and current_user.is_admin %}
-        <a href="{{ url_for('add_flight') }}" class="btn btn-warning mb-3">➕ Add New Flight</a>
+    {% if flights %}
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Flight Number</th>
+                    <th>Airline</th>
+                    <th>Departure</th>
+                    <th>Arrival</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Duration</th>
+                    <th>Price</th>
+                    <th>Book</th>
+                    {% if current_user.is_authenticated and current_user.is_admin %}
+                    <th>Actions</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for flight in flights %}
+                <tr>
+                    <td>{{ flight.Flight_Number }}</td>
+                    <td>{{ flight.Airline }}</td>
+                    <td>{{ flight.Departure }}</td>
+                    <td>{{ flight.Arrival }}</td>
+                    <td>{{ flight.Date }}</td>
+                    <td>{{ flight.Time }}</td>
+                    <td>{{ flight.Duration }}</td>
+                    <td>${{ flight.Price }}</td>
+                    <td>
+                        {% if current_user.is_authenticated %}
+                        <form method="POST" action="{{ url_for('select_seat') }}">
+                            <input type="hidden" name="flight_number" value="{{ flight.Flight_Number }}">
+                            <button type="submit" class="btn btn-success btn-sm">Book</button>
+                        </form>
+                        {% else %}
+                        <small class="text-muted">Login to book</small>
+                        {% endif %}
+                    </td>
+                    {% if current_user.is_authenticated and current_user.is_admin %}
+                    <td>
+                        <a href="{{ url_for('edit_flight', flight_number=flight.Flight_Number) }}" class="btn btn-sm btn-outline-primary">✏️ Edit</a>
+                        <form method="post" action="{{ url_for('delete_flight', flight_number=flight.Flight_Number) }}" style="display:inline;">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure you want to delete this flight?')">🗑️ Delete</button>
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+        <div class="alert alert-warning text-center">No flights found. Try adjusting your filters.</div>
     {% endif %}
 
-    <table class="table table-bordered">
-        <thead class="table-dark">
-            <tr>
-                <th>Flight Number</th>
-                <th>Airline</th>
-                <th>Departure</th>
-                <th>Arrival</th>
-                <th>Date</th>
-                <th>Time</th>
-                <th>Duration</th>
-                <th>Price</th>
-                <th>Book</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for flight in flights %}
-            <tr>
-                <td>{{ flight.Flight_Number }}</td>
-                <td>{{ flight.Airline }}</td>
-                <td>{{ flight.Departure }}</td>
-                <td>{{ flight.Arrival }}</td>
-                <td>{{ flight.Date }}</td>
-                <td>{{ flight.Time }}</td>
-                <td>{{ flight.Duration }}</td>
-                <td>${{ flight.Price }}</td>
-                <td>
-                    <form method="POST" action="{{ url_for('select_seat') }}">
-                        <input type="hidden" name="flight_number" value="{{ flight.Flight_Number }}">
-                        <button type="submit" class="btn btn-sm btn-primary">Book</button>
-                    </form>
-
-                    {% if current_user.is_authenticated and current_user.is_admin %}
-                    <div class="d-flex gap-1 mt-2">
-                        <a href="{{ url_for('edit_flight', flight_number=flight.Flight_Number) }}" class="btn btn-sm btn-outline-secondary">✏️ Edit</a>
-                        <form method="POST" action="{{ url_for('delete_flight', flight_number=flight.Flight_Number) }}" onsubmit="return confirm('Are you sure you want to delete this flight?');">
-                            <button type="submit" class="btn btn-sm btn-outline-danger">🗑️ Delete</button>
-                        </form>
-                    </div>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <a href="/" class="btn btn-secondary mt-3">Back to Home</a>
+    <div class="text-center mt-4">
+        <a href="{{ url_for('home') }}" class="btn btn-secondary">⬅ Back to Home</a>
+    </div>
 </body>
 </html>
