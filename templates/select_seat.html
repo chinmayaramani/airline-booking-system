@@ -21,10 +21,12 @@
         .legend {
             margin-bottom: 1rem;
         }
+
         .legend .legend-item {
             display: inline-block;
             margin-right: 15px;
         }
+
         .legend-box {
             display: inline-block;
             width: 20px;
@@ -32,6 +34,7 @@
             border-radius: 4px;
             margin-right: 5px;
         }
+
         .first { background-color: #d1c4e9; }
         .business { background-color: #ffe082; }
         .economy { background-color: #b2dfdb; }
@@ -126,8 +129,7 @@
 
             <div class="seat-map">
                 {% for row_num, row in seat_rows.items() %}
-                    {% set is_first_or_business = row|select('string')|map(attribute='Seat_Class')|list|first in ['First Class', 'Business'] %}
-                    <div class="row-seats {% if is_first_or_business %}justify-content-center{% endif %}">
+                    <div class="row-seats">
                         {% for i in range(7) %}
                             {% if i == 2 or i == 5 %}
                                 <div class="aisle-space"></div>
@@ -151,7 +153,8 @@
             </div>
 
             <div class="text-center">
-                <button type="submit" class="btn btn-primary btn-lg mt-3">Continue to Payment</button>
+                <button id="clearBtn" type="button" class="btn btn-outline-secondary me-2" onclick="clearSelection()">Clear Selection</button>
+                <button id="continueBtn" type="submit" class="btn btn-primary btn-lg mt-3" disabled>Continue to Payment</button>
             </div>
         </form>
     </div>
@@ -159,11 +162,22 @@
     <script>
         function selectSeat(el) {
             if (el.classList.contains('booked')) return;
+
             document.querySelectorAll('.seat').forEach(s => s.classList.remove('selected'));
             el.classList.add('selected');
+
             document.getElementById('seat_number').value = el.dataset.seat;
             document.getElementById('seat_class').value = el.dataset.seatClass;
             document.getElementById('price').value = el.dataset.price.replace('$', '');
+            document.getElementById('continueBtn').disabled = false;
+        }
+
+        function clearSelection() {
+            document.querySelectorAll('.seat').forEach(s => s.classList.remove('selected'));
+            document.getElementById('seat_number').value = '';
+            document.getElementById('seat_class').value = '';
+            document.getElementById('price').value = '';
+            document.getElementById('continueBtn').disabled = true;
         }
     </script>
 </body>

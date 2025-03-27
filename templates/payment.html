@@ -1,21 +1,83 @@
-<h2>Enter Payment Details</h2>
-<form method="post" action="{{ url_for('confirm_booking') }}">
-    <input type="hidden" name="flight_number" value="{{ flight_number }}">
-    <input type="hidden" name="seat_number" value="{{ seat_number }}">
-    <input type="hidden" name="price" value="{{ price }}">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Payment</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
 
-    <div class="mb-3">
-        <label for="card_number">Card Number</label>
-        <input type="text" class="form-control" name="card_number" required>
-    </div>
-    <div class="mb-3">
-        <label for="name">Name on Card</label>
-        <input type="text" class="form-control" name="name" required>
-    </div>
-    
-    <div class="alert alert-info">
-        You're about to pay <strong>${{ price }}</strong> for seat <strong>{{ seat_number }}</strong> on flight <strong>{{ flight_number }}</strong>.
-    </div>
+        .payment-container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 2rem;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 0 25px rgba(0, 0, 0, 0.08);
+        }
 
-    <button type="submit" class="btn btn-success">Confirm Booking</button>
-</form>
+        .section-title {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .summary-box {
+            background-color: #f1f1f1;
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-control {
+            height: 45px;
+            font-size: 16px;
+        }
+
+        .btn-lg {
+            padding: 12px 30px;
+            font-size: 16px;
+        }
+
+        .cancel-link {
+            text-decoration: none;
+            margin-left: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="payment-container">
+        <h3 class="section-title">💳 Payment Details</h3>
+
+        <div class="summary-box">
+            <p><strong>Flight:</strong> {{ flight_number }}</p>
+            <p><strong>Seat:</strong> {{ seat_number }}</p>
+            <p><strong>Class:</strong> {{ seat_class }}</p>
+            <p><strong>Total Price:</strong> ${{ price }}</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('confirm_booking') }}">
+            <input type="hidden" name="flight_number" value="{{ flight_number }}">
+            <input type="hidden" name="seat_number" value="{{ seat_number }}">
+            <input type="hidden" name="seat_class" value="{{ seat_class }}">
+            <input type="hidden" name="price" value="{{ price }}">
+
+            <div class="mb-3">
+                <label class="form-label">Cardholder Name</label>
+                <input type="text" name="name" class="form-control" required placeholder="John Doe">
+            </div>
+            <div class="mb-4">
+                <label class="form-label">Card Number</label>
+                <input type="text" name="card_number" class="form-control" required pattern="\d{16}" maxlength="16" placeholder="1234 5678 9012 3456">
+            </div>
+
+            <div class="d-flex justify-content-center">
+                <button type="submit" class="btn btn-success btn-lg">✅ Confirm Payment</button>
+                <a href="{{ url_for('flights') }}" class="btn btn-outline-secondary btn-lg cancel-link">❌ Cancel</a>
+            </div>
+        </form>
+    </div>
+</body>
+</html>

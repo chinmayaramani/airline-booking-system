@@ -102,6 +102,30 @@
             </tbody>
         </table>
     </div>
+
+    <!-- Pagination controls -->
+    {% if total_pages > 1 %}
+    <nav aria-label="Flight pagination" class="mt-4">
+      <ul class="pagination justify-content-center">
+        {% if page > 1 %}
+        <li class="page-item">
+          <a class="page-link" href="{{ url_for('flights', page=page-1, departure=request.args.get('departure'), arrival=request.args.get('arrival'), date=request.args.get('date'), min_price=request.args.get('min_price'), max_price=request.args.get('max_price')) }}">Previous</a>
+        </li>
+        {% endif %}
+        {% for p in range(1, total_pages + 1) %}
+        <li class="page-item {% if p == page %}active{% endif %}">
+          <a class="page-link" href="{{ url_for('flights', page=p, departure=request.args.get('departure'), arrival=request.args.get('arrival'), date=request.args.get('date'), min_price=request.args.get('min_price'), max_price=request.args.get('max_price')) }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+        {% if page < total_pages %}
+        <li class="page-item">
+          <a class="page-link" href="{{ url_for('flights', page=page+1, departure=request.args.get('departure'), arrival=request.args.get('arrival'), date=request.args.get('date'), min_price=request.args.get('min_price'), max_price=request.args.get('max_price')) }}">Next</a>
+        </li>
+        {% endif %}
+      </ul>
+    </nav>
+    {% endif %}
+
     {% else %}
         <div class="alert alert-warning text-center">No flights found. Try adjusting your filters.</div>
     {% endif %}

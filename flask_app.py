@@ -137,45 +137,69 @@ def flights():
     con = get_db_connection()
     cur = con.cursor()
 
-    # Get unique cities for dropdowns
+    # Get dropdown values
     cur.execute("SELECT DISTINCT Departure FROM Flights")
     departures = [row['Departure'] for row in cur.fetchall()]
 
     cur.execute("SELECT DISTINCT Arrival FROM Flights")
     arrivals = [row['Arrival'] for row in cur.fetchall()]
 
-    # Handle filters
+    # Filters
     departure = request.args.get('departure')
     arrival = request.args.get('arrival')
     date = request.args.get('date')
     min_price = request.args.get('min_price')
     max_price = request.args.get('max_price')
+    page = request.args.get('page', 1, type=int)
+    flights_per_page = 10
 
     base_query = "SELECT * FROM Flights WHERE 1=1"
-    filters = []
+    count_query = "SELECT COUNT(*) as total FROM Flights WHERE 1=1"
     values = []
 
+    # Apply filters
     if departure:
         base_query += " AND Departure = %s"
+        count_query += " AND Departure = %s"
         values.append(departure)
     if arrival:
         base_query += " AND Arrival = %s"
+        count_query += " AND Arrival = %s"
         values.append(arrival)
     if date:
         base_query += " AND Date = %s"
+        count_query += " AND Date = %s"
         values.append(date)
     if min_price:
         base_query += " AND Price >= %s"
+        count_query += " AND Price >= %s"
         values.append(min_price)
     if max_price:
         base_query += " AND Price <= %s"
+        count_query += " AND Price <= %s"
         values.append(max_price)
+
+    # Total count
+    cur.execute(count_query, values)
+    total_flights = cur.fetchone()['total']
+    total_pages = (total_flights + flights_per_page - 1) // flights_per_page
+
+    # Add LIMIT + OFFSET to base query
+    base_query += " LIMIT %s OFFSET %s"
+    values += [flights_per_page, (page - 1) * flights_per_page]
 
     cur.execute(base_query, values)
     flights = cur.fetchall()
     con.close()
 
-    return render_template("flights.html", flights=flights, departures=departures, arrivals=arrivals)
+    return render_template(
+        "flights.html",
+        flights=flights,
+        departures=departures,
+        arrivals=arrivals,
+        page=page,
+        total_pages=total_pages
+    )
 
 
 @app.route('/my-bookings')
@@ -185,9 +209,11 @@ def my_bookings():
     cur = con.cursor()
     cur.execute("""
         SELECT b.Booking_ID, b.Seat_Number, b.Total_Price, b.Booking_Date,
-               f.Flight_Number, f.Airline, f.Departure, f.Arrival, f.Date, f.Time
+               f.Flight_Number, f.Airline, f.Departure, f.Arrival, f.Date, f.Time,
+               p.Card_Name, p.Card_Number
         FROM Bookings b
         JOIN Flights f ON b.Flight_Number = f.Flight_Number
+        LEFT JOIN Payment p ON b.Booking_ID = p.Booking_ID
         WHERE b.Passenger_ID = %s
         ORDER BY b.Booking_Date DESC
     """, (current_user.id,))
@@ -338,19 +364,26 @@ def confirm_booking():
     flight_number = request.form['flight_number']
     seat_number = request.form['seat_number']
     price = request.form['price']
+    card_number = request.form['card_number']
+    card_name = request.form['name']
+
     con = get_db_connection()
     cur = con.cursor()
+
     cur.execute("""
         INSERT INTO Bookings (Passenger_ID, Flight_Number, Booking_Date, Seat_Number, Total_Price)
         VALUES (%s, %s, NOW(), %s, %s)
     """, (current_user.id, flight_number, seat_number, price))
+
     cur.execute("""
-        INSERT INTO Payment (Booking_ID, Payment_Date, Amount, Payment_Status)
-        VALUES (LAST_INSERT_ID(), NOW(), %s, 'Completed')
-    """, (price,))
+        INSERT INTO Payment (Booking_ID, Payment_Date, Amount, Payment_Status, Card_Name, Card_Number)
+        VALUES (LAST_INSERT_ID(), NOW(), %s, 'Completed', %s, %s)
+    """, (price, card_name, card_number))
+
     cur.execute("""
         UPDATE Seats SET Status = 'Booked' WHERE Flight_Number = %s AND Seat_Number = %s
     """, (flight_number, seat_number))
+
     con.commit()
     con.close()
     flash("Booking confirmed successfully!", "success")
