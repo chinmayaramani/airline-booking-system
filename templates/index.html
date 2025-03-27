@@ -48,7 +48,8 @@
 
             {% if current_user.is_admin %}
                 <div class="mt-4">
-                    <a href="{{ url_for('add_flight') }}" class="btn btn-warning btn-sm">➕ Add New Flight</a>
+                    <a href="{{ url_for('add_flight') }}" class="btn btn-warning btn-sm me-2">➕ Add New Flight</a>
+                    <a href="{{ url_for('view_all_bookings') }}" class="btn btn-secondary btn-sm">📊 View All Bookings</a>
                 </div>
             {% endif %}
 

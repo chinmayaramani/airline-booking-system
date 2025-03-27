@@ -12,6 +12,29 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
 
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        name = request.form["name"]
+        email = request.form["email"]
+        password = request.form["password"]
+        hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
+
+        con = get_db_connection()
+        cur = con.cursor()
+        try:
+            cur.execute("INSERT INTO Users (Name, Email, Password, is_admin) VALUES (%s, %s, %s, FALSE)",
+                        (name, email, hashed_password))
+            con.commit()
+            flash("Registration successful! Please log in.", "success")
+            return redirect(url_for("login"))
+        except pymysql.MySQLError as e:
+            flash("Error: " + str(e), "danger")
+        finally:
+            con.close()
+
+    return render_template("register.html")
+
 def get_db_connection():
     return pymysql.connect(
         host=credentials.DB_HOST,
@@ -118,6 +141,75 @@ def generate_seats_route():
     generate_seats_for_all_flights()
     flash("Seats generated for all missing flights!", "success")
     return redirect(url_for("flights"))
+@app.route('/admin/all-bookings')
+@login_required
+def view_all_bookings():
+    if not current_user.is_admin:
+        flash("Access denied. Admins only.", "danger")
+        return redirect(url_for("home"))
+
+    con = get_db_connection()
+    cur = con.cursor()
+    cur.execute("""
+        SELECT b.Booking_ID, b.Seat_Number, b.Total_Price, b.Booking_Date,
+               f.Flight_Number, f.Airline, f.Departure, f.Arrival, f.Date, f.Time,
+               u.Name AS User_Name, p.Card_Name, p.Card_Number
+        FROM Bookings b
+        JOIN Flights f ON b.Flight_Number = f.Flight_Number
+        JOIN Users u ON b.Passenger_ID = u.User_ID
+        LEFT JOIN Payment p ON b.Booking_ID = p.Booking_ID
+        ORDER BY b.Booking_Date DESC
+    """)
+    all_bookings = cur.fetchall()
+    con.close()
+    return render_template("all_bookings.html", bookings=all_bookings)
+
+@app.route('/admin/clear-booked-seats', methods=['POST'])
+@login_required
+def clear_booked_seats():
+    if not current_user.is_admin:
+        flash("Access denied.", "danger")
+        return redirect(url_for('home'))
+
+    flight_number = request.form['flight_number']
+    con = get_db_connection()
+    cur = con.cursor()
+
+    try:
+        # Get all booked seats for the selected flight
+        cur.execute("SELECT Seat_Number FROM Seats WHERE Flight_Number = %s AND Status = 'Booked'", (flight_number,))
+        booked_seats = cur.fetchall()
+
+        for seat in booked_seats:
+            seat_number = seat['Seat_Number']
+
+            # Get the associated Booking_ID
+            cur.execute("SELECT Booking_ID FROM Bookings WHERE Flight_Number = %s AND Seat_Number = %s",
+                        (flight_number, seat_number))
+            booking = cur.fetchone()
+
+            if booking:
+                booking_id = booking['Booking_ID']
+
+                # Delete from Payment and Bookings tables
+                cur.execute("DELETE FROM Payment WHERE Booking_ID = %s", (booking_id,))
+                cur.execute("DELETE FROM Bookings WHERE Booking_ID = %s", (booking_id,))
+
+            # Mark the seat as available again
+            cur.execute("UPDATE Seats SET Status = 'Available' WHERE Flight_Number = %s AND Seat_Number = %s",
+                        (flight_number, seat_number))
+
+        con.commit()
+        flash(f"Cleared booked seats and related bookings for flight {flight_number}.", "success")
+
+    except Exception as e:
+        con.rollback()
+        flash(f"Error clearing booked seats: {e}", "danger")
+    finally:
+        con.close()
+
+    return redirect(url_for('flights'))
+
 
 @app.route('/')
 def home():
@@ -296,7 +388,7 @@ def select_seat():
     from collections import defaultdict
 
     def generate_seat_rows(seats):
-        seat_rows = defaultdict(lambda: [None] * 7)  # 7 seats per row: A-G
+        seat_rows = defaultdict(lambda: [None] * 7)
         column_mapping = {'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, 'F': 5, 'G': 6}
         for seat in seats:
             seat_number = seat["Seat_Number"]
@@ -314,7 +406,6 @@ def select_seat():
         con = get_db_connection()
         cur = con.cursor()
 
-        # Fetch base price from Flights table
         cur.execute("SELECT Price FROM Flights WHERE Flight_Number = %s", (flight_number,))
         flight = cur.fetchone()
         if not flight:
@@ -323,7 +414,6 @@ def select_seat():
 
         base_price = float(flight['Price'])
 
-        # Fetch seats
         cur.execute("""
             SELECT Seat_Number, Seat_Class, Status
             FROM Seats
@@ -334,20 +424,48 @@ def select_seat():
 
         for seat in seats:
             seat["Booked"] = seat["Status"] == "Booked"
-            if seat["Seat_Class"] == "First Class":
-                seat["Price"] = round(base_price * 1.5, 2)
-            elif seat["Seat_Class"] == "Business":
-                seat["Price"] = round(base_price * 1.25, 2)
-            else:
-                seat["Price"] = round(base_price, 2)
+            seat["Price"] = round(base_price * 1.5 if seat["Seat_Class"] == "First Class"
+                                  else base_price * 1.25 if seat["Seat_Class"] == "Business"
+                                  else base_price, 2)
 
         seat_rows = generate_seat_rows(seats)
-
         con.close()
-        return render_template("select_seat.html", flight_number=flight_number, seat_rows=seat_rows)
+
+        return render_template(
+            "select_seat.html",
+            flight_number=flight_number,
+            seat_rows=seat_rows,
+            is_admin=current_user.is_authenticated and current_user.is_admin
+        )
 
     except Exception as e:
         return f"Error loading seat selection: {e}"
+@app.route('/admin/reset-seats/<flight_number>', methods=['POST'])
+@login_required
+def reset_seats(flight_number):
+    if not current_user.is_admin:
+        flash("Unauthorized access.", "danger")
+        return redirect(url_for("home"))
+
+    try:
+        con = get_db_connection()
+        cur = con.cursor()
+
+        # Reset all booked seats to Available
+        cur.execute("""
+            UPDATE Seats
+            SET Status = 'Available'
+            WHERE Flight_Number = %s AND Status = 'Booked'
+        """, (flight_number,))
+        con.commit()
+        flash(f"All booked seats for flight {flight_number} have been reset to available.", "success")
+
+    except Exception as e:
+        flash(f"Error resetting seats: {e}", "danger")
+    finally:
+        con.close()
+
+    return redirect(url_for('flights'))
 
 @app.route('/payment', methods=['POST'])
 @login_required
@@ -389,27 +507,6 @@ def confirm_booking():
     flash("Booking confirmed successfully!", "success")
     return redirect(url_for("home"))
 
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "POST":
-        name = request.form["name"]
-        email = request.form["email"]
-        password = request.form["password"]
-        hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
-
-        con = get_db_connection()
-        cur = con.cursor()
-        try:
-            cur.execute("INSERT INTO Users (Name, Email, Password, is_admin) VALUES (%s, %s, %s, FALSE)", (name, email, hashed_password))
-            con.commit()
-            flash("Registration successful! Please log in.", "success")
-            return redirect(url_for("login"))
-        except pymysql.MySQLError as e:
-            flash("Error: " + str(e), "danger")
-        finally:
-            con.close()
-
-    return render_template("register.html")
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
