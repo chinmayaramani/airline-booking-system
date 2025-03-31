@@ -3,9 +3,13 @@ from flask_bcrypt import Bcrypt
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 import pymysql
 import credentials
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__, template_folder="templates")
-app.secret_key = "your_secret_key"
+app.secret_key = os.getenv("SECRET_KEY", "dev_key_fallback")
 
 bcrypt = Bcrypt(app)
 login_manager = LoginManager()
