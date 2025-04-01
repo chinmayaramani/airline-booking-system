@@ -2,7 +2,6 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_bcrypt import Bcrypt
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 import pymysql
-import credentials
 import os
 from dotenv import load_dotenv
 
@@ -41,12 +40,13 @@ def register():
 
 def get_db_connection():
     return pymysql.connect(
-        host=credentials.DB_HOST,
-        user=credentials.DB_USER,
-        password=credentials.DB_PWD,
-        database=credentials.DB_NAME,
+        host=os.getenv("DB_HOST"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PWD"),
+        database=os.getenv("DB_NAME"),
         cursorclass=pymysql.cursors.DictCursor
     )
+
 
 class User(UserMixin):
     def __init__(self, id, name, email, is_admin=False):
